@@ -13,21 +13,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check:
+    name: Dockerfiles match template
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Regenerate Dockerfiles
+        run: task generate
+
+      - name: Fail if generated files differ
+        run: git diff --exit-code fpm/Dockerfile apache/Dockerfile frankenphp/Dockerfile
+
   build:
-    uses: Ilyes512/github-actions/.github/workflows/build-php.yml@1.0.4
+    needs: check
+    uses: specsnl/github-actions/.github/workflows/build-php.yml@3.0.0
     strategy:
       fail-fast: false
       matrix:
         runs-on:
-          - os: ubuntu-24.04
+          - os: ubuntu-26.04
             platform: linux/amd64
-          - os: ubuntu-24.04-arm
+          - os: ubuntu-26.04-arm
             platform: linux/arm64
         docker:
           - dockerfile: fpm/Dockerfile
             image-name: ghcr.io/${{ github.repository }}
           - dockerfile: apache/Dockerfile
             image-name: ghcr.io/${{ github.repository }}/apache
+          - dockerfile: frankenphp/Dockerfile
+            image-name: ghcr.io/${{ github.repository }}/frankenphp
     with:
       runs-on: ${{ matrix.runs-on.os }}
       platform: ${{ matrix.runs-on.platform }}
@@ -35,13 +57,14 @@ jobs:
       dockerfile: ${{ matrix.docker.dockerfile }}
 
   merge:
-    uses: Ilyes512/github-actions/.github/workflows/merge-php.yml@1.0.4
+    uses: specsnl/github-actions/.github/workflows/merge-php.yml@3.0.0
     needs: build
     strategy:
       matrix:
         image-name:
           - ghcr.io/${{ github.repository }}
           - ghcr.io/${{ github.repository }}/apache
+          - ghcr.io/${{ github.repository }}/frankenphp
     with:
-      runs-on: ubuntu-24.04
+      runs-on: ubuntu-26.04
       image-name: ${{ matrix.image-name }}
